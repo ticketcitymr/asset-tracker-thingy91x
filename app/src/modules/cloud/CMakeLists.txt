@@ -11,6 +11,7 @@ target_sources_ifdef(CONFIG_APP_LOCATION app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}
 target_sources_ifdef(CONFIG_APP_ENVIRONMENTAL app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/cloud_environmental.c)
 target_sources_ifdef(CONFIG_APP_CLOUD_SHELL app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/cloud_shell.c)
 target_include_directories(app PRIVATE .)
+target_sources_ifdef(CONFIG_APP_ORIENTATION app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/cloud_orientation.c)
 
 if (CONFIG_NRF_CLOUD_COAP_SEC_TAG GREATER_EQUAL 2147483648 AND CONFIG_NRF_CLOUD_COAP_SEC_TAG LESS_EQUAL 2147483667)
 	message(WARNING "CONFIG_NRF_CLOUD_COAP_SEC_TAG is set to a developer security tag. "

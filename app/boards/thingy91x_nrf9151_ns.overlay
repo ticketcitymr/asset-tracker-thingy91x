@@ -9,7 +9,15 @@
 &bme680 {
 	status = "okay";
 };
+&accelerometer_lp {
+	status = "okay";
+};
 
+/ {
+	aliases {
+		accelerometer = &accelerometer_lp;
+	};
+};
 / {
 	chosen {
 		nordic,modem-trace-uart = &uart1;

@@ -27,6 +27,10 @@
 #endif /* CONFIG_APP_ENVIRONMENTAL */
 #include "network.h"
 #include "storage.h"
+#ifdef CONFIG_APP_ORIENTATION
+#include "cloud_orientation.h"
+#endif /* CONFIG_APP_ORIENTATION */
+
 
 /* Register log module */
 LOG_MODULE_REGISTER(cloud, CONFIG_APP_CLOUD_LOG_LEVEL);
@@ -464,8 +468,8 @@ static inline int attempt_timestamp_to_unix_ms(int64_t *uptime_ms)
 
 	return 0;
 }
-
-#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL))
+#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL) || defined(CONFIG_APP_ORIENTATION))
+/*   #if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL))  */
 static int handle_data_timestamp(int64_t *timestamp_ms)
 {
 	int err;
@@ -540,7 +544,20 @@ static int send_storage_data_to_cloud(const struct storage_data_item *item)
 		return 0;
 	}
 #endif /* CONFIG_APP_POWER */
+#if defined(CONFIG_APP_ORIENTATION)
+	if (item->type == STORAGE_TYPE_ORIENTATION) {
+		const struct orientation_msg *ori = &item->data.ORIENTATION;
 
+		timestamp_ms = ori->timestamp;
+
+		err = handle_data_timestamp(&timestamp_ms);
+		if (err) {
+			return err;
+		}
+
+		return cloud_orientation_send(ori, timestamp_ms, confirmable);
+	}
+#endif /* CONFIG_APP_ORIENTATION */
 #if defined(CONFIG_APP_ENVIRONMENTAL)
 	if (item->type == STORAGE_TYPE_ENVIRONMENTAL) {
 		const struct environmental_msg *env = &item->data.ENVIRONMENTAL;

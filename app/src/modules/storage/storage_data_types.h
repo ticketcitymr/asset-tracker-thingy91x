@@ -23,6 +23,9 @@
 #if IS_ENABLED(CONFIG_APP_LOCATION)
 #include "location.h"
 #endif
+#if IS_ENABLED(CONFIG_APP_ORIENTATION)
+#include "orientation.h"
+#endif
 
 /**
  * @brief List of data sources that can be stored by the storage module
@@ -70,8 +73,11 @@
 		      environmental_check, environmental_extract)))				\
 	IF_ENABLED(CONFIG_APP_LOCATION,								\
 		   (X(LOCATION, location_chan, struct location_msg,				\
-		      struct location_msg, location_check, location_extract)))
-
+		      struct location_msg, location_check, location_extract)))     \
+	IF_ENABLED(CONFIG_APP_ORIENTATION,							\
+		   (X(ORIENTATION, orientation_chan,						\
+		      struct orientation_msg, struct orientation_msg,				\
+		      orientation_check, orientation_extract)))
 #define STORAGE_DATA_TYPE(_name)								\
 	STORAGE_TYPE_ ## _name
 

@@ -36,6 +36,10 @@
 #include "power.h"
 #endif /* CONFIG_APP_POWER */
 
+#if defined(CONFIG_APP_ORIENTATION)
+#include "orientation.h"
+#endif /* CONFIG_APP_ORIENTATION */
+
 BUILD_ASSERT(CONFIG_APP_WATCHDOG_TIMEOUT_SECONDS >
 	     CONFIG_APP_MSG_PROCESSING_TIMEOUT_SECONDS,
 	     "Watchdog timeout must be greater than maximum message processing time");
@@ -463,6 +467,19 @@ static void trigger_sampling(struct main_state *state_object)
 
 		return;
 	}
+#if defined(CONFIG_APP_ORIENTATION)
+	struct orientation_msg orientation_msg = {
+		.type = ORIENTATION_SAMPLE_REQUEST,
+	};
+
+	err = zbus_chan_pub(&orientation_chan, &orientation_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish orientation sample request, error: %d", err);
+		SEND_FATAL_ERROR();
+
+		return;
+	}
+#endif /* CONFIG_APP_ORIENTATION */
 }
 
 static void waiting_entry_common(const struct main_state *state_object)

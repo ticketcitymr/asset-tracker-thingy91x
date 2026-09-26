@@ -21,7 +21,9 @@
 #ifdef CONFIG_APP_LOCATION
 #include "location.h"
 #endif
-
+#ifdef CONFIG_APP_ORIENTATION
+#include "orientation.h"
+#endif
 /**
  * @brief Register all enabled data types with the storage module
  *
@@ -80,7 +82,20 @@ void location_extract(const struct location_msg *msg, struct location_msg *data)
 
 /* Environmental module storage */
 #ifdef CONFIG_APP_ENVIRONMENTAL
+/* Orientation module storage */
+#ifdef CONFIG_APP_ORIENTATION
 
+bool orientation_check(const struct orientation_msg *msg)
+{
+	return msg->type == ORIENTATION_SAMPLE_RESPONSE;
+}
+
+void orientation_extract(const struct orientation_msg *msg,
+			 struct orientation_msg *data)
+{
+	*data = *msg;
+}
+#endif /* CONFIG_APP_ORIENTATION */
 /* Provide functions used by storage module to check and extract data */
 bool environmental_check(const struct environmental_msg *msg)
 {
