@@ -1,0 +1,87 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig APP_IMPACT
+	bool "Impact detection module"
+	depends on ADXL362 || ADXL367
+	default n
+
+if APP_IMPACT
+
+config APP_IMPACT_THREAD_STACK_SIZE
+	int "Thread stack size"
+	default 1280
+
+config APP_IMPACT_SAMPLE_INTERVAL_MS
+	int "Accelerometer sample interval in milliseconds"
+	default 20
+	help
+	  How often the accelerometer is polled for impact detection. Kept
+	  short (fast) relative to orientation/pedometer sampling so that a
+	  short shock pulse isn't missed or under-measured between samples.
+
+config APP_IMPACT_THRESHOLD_MG
+	int "Impact detection threshold in milli-g"
+	default 8000
+	help
+	  Peak acceleration magnitude, in thousandths of g, that triggers an
+	  impact event. Default is 8000 (8.0 g). This is a starting point, not
+	  a calibrated value - see the project notes on tuning it against
+	  real logged peak-g data from normal activity.
+
+config APP_IMPACT_CAPTURE_WINDOW_MS
+	int "Peak capture window in milliseconds"
+	default 100
+	help
+	  Once the threshold is crossed, the module keeps sampling for this
+	  long and reports the highest g value seen in that window, rather
+	  than just the first over-threshold sample - the true peak of a
+	  shock event can land a sample or two after the initial crossing.
+
+config APP_IMPACT_DEBOUNCE_MS
+	int "Debounce time in milliseconds after a reported impact"
+	default 3000
+	help
+	  Minimum time after a reported impact event before another one can
+	  be detected. Prevents one physical event (e.g. bouncing after a
+	  fall) from generating a flood of separate impact reports/pushes.
+config APP_IMPACT_MOTION_THRESHOLD_MG
+        int "Motion detection threshold in milli-g"
+        default 80
+        help
+          Peak-to-peak acceleration variation, in thousandths of g, within a
+          roughly 1 second window, that is considered evidence of motion
+          (walking, riding in a vehicle, general vibration) as opposed to
+          being stationary. This is independent of the impact-detection
+          threshold above - much smaller, since it only needs to catch
+          "something is moving", not "something hit hard".
+config APP_IMPACT_MOTION_STILL_TIMEOUT_SECONDS
+        int "Seconds of no motion before reverting to the normal sampling interval"
+        default 120
+        help
+          How long the device must show no motion (per
+          CONFIG_APP_IMPACT_MOTION_THRESHOLD_MG) before it is considered
+          stationary again, at which point the sampling interval reverts from
+          CONFIG_APP_SAMPLING_INTERVAL_ACTIVE_SECONDS back to
+          CONFIG_APP_SAMPLING_INTERVAL_SECONDS.
+config APP_IMPACT_ACTIVITY_REPORT_INTERVAL_SECONDS
+        int "Activity summary report interval in seconds"
+        default 300
+        help
+          How often the module publishes an activity summary (peak g-force
+          seen since the last report), regardless of whether it crossed the
+          hard impact threshold. This gives the owner an ongoing record of
+          how hard the dog has been playing/exerting - not just a log of
+          hard-impact events - so mild-to-moderate over-exertion (e.g. an
+          older dog straining after a squirrel) can be noticed even when
+          nothing rose to the level of a reportable impact. Independent of
+          CONFIG_APP_IMPACT_THRESHOLD_MG and CONFIG_APP_IMPACT_DEBOUNCE_MS,
+          which govern the separate hard-impact alert path.
+module = APP_IMPACT
+module-str = Impact detection module
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # APP_IMPACT

@@ -30,6 +30,13 @@
 #ifdef CONFIG_APP_ORIENTATION
 #include "cloud_orientation.h"
 #endif /* CONFIG_APP_ORIENTATION */
+#ifdef CONFIG_APP_PEDOMETER
+#include "cloud_pedometer.h"
+#endif /* CONFIG_APP_PEDOMETER */
+
+#ifdef CONFIG_APP_IMPACT
+#include "cloud_impact.h"
+#endif
 
 
 /* Register log module */
@@ -468,7 +475,8 @@ static inline int attempt_timestamp_to_unix_ms(int64_t *uptime_ms)
 
 	return 0;
 }
-#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL) || defined(CONFIG_APP_ORIENTATION))
+#if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL) || defined(CONFIG_APP_ORIENTATION) \
+	|| defined(CONFIG_APP_PEDOMETER))
 /*   #if (defined(CONFIG_APP_POWER) || defined(CONFIG_APP_ENVIRONMENTAL))  */
 static int handle_data_timestamp(int64_t *timestamp_ms)
 {
@@ -558,6 +566,20 @@ static int send_storage_data_to_cloud(const struct storage_data_item *item)
 		return cloud_orientation_send(ori, timestamp_ms, confirmable);
 	}
 #endif /* CONFIG_APP_ORIENTATION */
+#if defined(CONFIG_APP_PEDOMETER)
+	if (item->type == STORAGE_TYPE_PEDOMETER) {
+		const struct pedometer_msg *ped = &item->data.PEDOMETER;
+
+		timestamp_ms = ped->timestamp;
+
+		err = handle_data_timestamp(&timestamp_ms);
+		if (err) {
+			return err;
+		}
+
+		return cloud_pedometer_send(ped, timestamp_ms, confirmable);
+	}
+#endif /* CONFIG_APP_PEDOMETER */
 #if defined(CONFIG_APP_ENVIRONMENTAL)
 	if (item->type == STORAGE_TYPE_ENVIRONMENTAL) {
 		const struct environmental_msg *env = &item->data.ENVIRONMENTAL;
@@ -572,6 +594,16 @@ static int send_storage_data_to_cloud(const struct storage_data_item *item)
 
 		return cloud_environmental_send(env, timestamp_ms, confirmable);
 	}
+#if defined(CONFIG_APP_IMPACT)
+	if (item->type == STORAGE_TYPE_IMPACT) {
+		const struct impact_msg *imp = &item->data.IMPACT;
+		timestamp_ms = imp->timestamp;
+		err = handle_data_timestamp(&timestamp_ms);
+		if (err) { return err; }
+		return cloud_impact_send(imp, timestamp_ms, confirmable);
+	}
+#endif /* CONFIG_APP_IMPACT */
+
 #endif /* CONFIG_APP_ENVIRONMENTAL */
 
 #if defined(CONFIG_APP_LOCATION)

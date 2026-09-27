@@ -20,6 +20,10 @@ rsource "src/modules/storage/Kconfig.storage"
 rsource "memfault/Kconfig.memfault"
 rsource "src/modules/orientation/Kconfig.orientation"
 
+rsource "src/modules/pedometer/Kconfig.pedometer"
+
+rsource "src/modules/impact/Kconfig.impact"
+
 endmenu
 
 menu "Zephyr Kernel"

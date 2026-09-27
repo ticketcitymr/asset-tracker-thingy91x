@@ -24,6 +24,13 @@
 #ifdef CONFIG_APP_ORIENTATION
 #include "orientation.h"
 #endif
+#ifdef CONFIG_APP_PEDOMETER
+#include "pedometer.h"
+#endif
+
+#ifdef CONFIG_APP_IMPACT
+#include "impact.h"
+#endif
 /**
  * @brief Register all enabled data types with the storage module
  *
@@ -108,3 +115,30 @@ void environmental_extract(const struct environmental_msg *msg,
 	*data = *msg;
 }
 #endif /* CONFIG_APP_ENVIRONMENTAL */
+
+/* Pedometer module storage */
+#ifdef CONFIG_APP_PEDOMETER
+
+bool pedometer_check(const struct pedometer_msg *msg)
+{
+	return msg->type == PEDOMETER_SAMPLE_RESPONSE;
+}
+
+void pedometer_extract(const struct pedometer_msg *msg, struct pedometer_msg *data)
+{
+	*data = *msg;
+}
+#endif /* CONFIG_APP_PEDOMETER */
+
+#ifdef CONFIG_APP_IMPACT
+
+bool impact_check(const struct impact_msg *msg)
+{
+	return msg->type == IMPACT_SAMPLE_RESPONSE || msg->type == IMPACT_ACTIVITY_SUMMARY;
+}
+
+void impact_extract(const struct impact_msg *msg, struct impact_msg *data)
+{
+	*data = *msg;
+}
+#endif /* CONFIG_APP_IMPACT */

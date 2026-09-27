@@ -12,6 +12,15 @@ config APP_SAMPLING_INTERVAL_SECONDS
 	  Interval in seconds that determines how often sensor and location data is
 	  collected.
 
+config APP_SAMPLING_INTERVAL_ACTIVE_SECONDS
+	int "Sampling interval while in motion"
+	default 60
+	help
+	  Sampling interval used while the impact module (if enabled) detects
+	  the device is in motion. Overrides APP_SAMPLING_INTERVAL_SECONDS
+	  until a sustained period of stillness is detected again (see
+	  CONFIG_APP_IMPACT_MOTION_STILL_TIMEOUT_SECONDS).
+
 config APP_WATCHDOG_TIMEOUT_SECONDS
 	int "Watchdog timeout"
 	default 180

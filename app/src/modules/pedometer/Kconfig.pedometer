@@ -1,0 +1,51 @@
+#
+# Copyright (c) 2025 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig APP_PEDOMETER
+	bool "Pedometer module"
+	depends on ADXL362 || ADXL367
+	default n
+
+if APP_PEDOMETER
+
+config APP_PEDOMETER_THREAD_STACK_SIZE
+	int "Thread stack size"
+	default 1280
+
+config APP_PEDOMETER_SAMPLE_INTERVAL_MS
+	int "Accelerometer poll interval for step detection, in milliseconds"
+	default 50
+	help
+	  How often the accelerometer is sampled for the purpose of detecting steps.
+	  This runs independently of, and much more frequently than, the app's
+	  overall sample_interval (which only governs when accumulated steps are
+	  reported to storage/cloud). 50 ms gives 20 Hz, enough headroom for a
+	  dog's stride cadence without excessive current draw.
+
+config APP_PEDOMETER_STEP_THRESHOLD_MM_S2
+	int "Dynamic acceleration threshold for a step, in mm/s^2"
+	default 1200
+	help
+	  Minimum deviation from standard gravity (in the magnitude of the
+	  accelerometer vector) required to count a step. Expressed in
+	  thousandths of m/s^2 to avoid floating point in Kconfig.
+	  1200 mm/s^2 (1.2 m/s^2, ~0.12 g) is a reasonable starting point for a
+	  collar/vest-mounted sensor; tune after watching real gait data.
+
+config APP_PEDOMETER_STEP_DEBOUNCE_MS
+	int "Minimum time between counted steps, in milliseconds"
+	default 250
+	help
+	  Refractory period after a counted step during which no further step
+	  is counted, to reject double-counting a single footfall's ringing.
+	  250 ms caps the detectable cadence at 240 steps/min, well above any
+	  real dog gait.
+
+module = APP_PEDOMETER
+module-str = PEDOMETER
+source "subsys/logging/Kconfig.template.log_config"
+
+endif # APP_PEDOMETER

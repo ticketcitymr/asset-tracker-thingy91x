@@ -40,6 +40,14 @@
 #include "orientation.h"
 #endif /* CONFIG_APP_ORIENTATION */
 
+#if defined(CONFIG_APP_PEDOMETER)
+#include "pedometer.h"
+#endif /* CONFIG_APP_PEDOMETER */
+
+#if defined(CONFIG_APP_IMPACT)
+#include "impact.h"
+#endif /* CONFIG_APP_IMPACT */
+
 BUILD_ASSERT(CONFIG_APP_WATCHDOG_TIMEOUT_SECONDS >
 	     CONFIG_APP_MSG_PROCESSING_TIMEOUT_SECONDS,
 	     "Watchdog timeout must be greater than maximum message processing time");
@@ -107,7 +115,8 @@ ZBUS_CHAN_DEFINE(priv_main_chan,
 	X(timer_chan,		struct timer_msg)		\
 	X(priv_main_chan,	struct priv_main_msg)		\
 	IF_ENABLED(CONFIG_APP_BUTTON, (X(button_chan, struct button_msg)))	\
-	IF_ENABLED(CONFIG_APP_POWER, (X(power_chan, struct power_msg)))
+	IF_ENABLED(CONFIG_APP_POWER, (X(power_chan, struct power_msg)))	\
+	IF_ENABLED(CONFIG_APP_IMPACT, (X(motion_chan, struct motion_msg)))
 
 /* Calculate the maximum message size from the list of channels */
 #define MAX_MSG_SIZE			MAX_MSG_SIZE_FROM_LIST(CHANNEL_LIST)
@@ -480,6 +489,19 @@ static void trigger_sampling(struct main_state *state_object)
 		return;
 	}
 #endif /* CONFIG_APP_ORIENTATION */
+#if defined(CONFIG_APP_PEDOMETER)
+	struct pedometer_msg pedometer_msg = {
+		.type = PEDOMETER_SAMPLE_REQUEST,
+	};
+
+	err = zbus_chan_pub(&pedometer_chan, &pedometer_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish pedometer sample request, error: %d", err);
+		SEND_FATAL_ERROR();
+
+		return;
+	}
+#endif /* CONFIG_APP_PEDOMETER */
 }
 
 static void waiting_entry_common(const struct main_state *state_object)
@@ -932,6 +954,40 @@ static enum smf_state_result running_run(void *o)
 			return SMF_EVENT_HANDLED;
 		}
 	}
+
+#if defined(CONFIG_APP_IMPACT)
+	/* Handle motion state changes: speed up sampling while moving, relax back
+	 * to the configured interval once still again. Placed here (the
+	 * top-level running state) so it applies regardless of connectivity or
+	 * which sampling sub-state is currently active.
+	 */
+	else if (state_object->chan == &motion_chan) {
+		const struct motion_msg *msg = (const struct motion_msg *)state_object->msg_buf;
+		uint32_t new_interval = msg->is_moving ?
+			CONFIG_APP_SAMPLING_INTERVAL_ACTIVE_SECONDS :
+			CONFIG_APP_SAMPLING_INTERVAL_SECONDS;
+
+		if (state_object->sample_interval_sec != new_interval) {
+			int err;
+			const struct timer_msg timer_msg = { .type = TIMER_CONFIG_CHANGED };
+
+			LOG_INF("Motion %s, sample interval now %d seconds",
+				msg->is_moving ? "started" : "stopped", new_interval);
+
+			state_object->sample_interval_sec = new_interval;
+			state_object->sample_start_time = k_uptime_seconds();
+
+			err = zbus_chan_pub(&timer_chan, &timer_msg, PUB_TIMEOUT);
+			if (err) {
+				LOG_ERR("Failed to publish timer config changed event, error: %d",
+					err);
+				SEND_FATAL_ERROR();
+			}
+		}
+
+		return SMF_EVENT_HANDLED;
+	}
+#endif /* CONFIG_APP_IMPACT */
 
 	return SMF_EVENT_PROPAGATE;
 }

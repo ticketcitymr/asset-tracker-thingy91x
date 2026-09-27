@@ -26,6 +26,13 @@
 #if IS_ENABLED(CONFIG_APP_ORIENTATION)
 #include "orientation.h"
 #endif
+#if IS_ENABLED(CONFIG_APP_PEDOMETER)
+#include "pedometer.h"
+#endif
+
+#if IS_ENABLED(CONFIG_APP_IMPACT)
+#include "impact.h"
+#endif
 
 /**
  * @brief List of data sources that can be stored by the storage module
@@ -77,7 +84,15 @@
 	IF_ENABLED(CONFIG_APP_ORIENTATION,							\
 		   (X(ORIENTATION, orientation_chan,						\
 		      struct orientation_msg, struct orientation_msg,				\
-		      orientation_check, orientation_extract)))
+		      orientation_check, orientation_extract)))				\
+	IF_ENABLED(CONFIG_APP_PEDOMETER,							\
+		   (X(PEDOMETER, pedometer_chan,						\
+		      struct pedometer_msg, struct pedometer_msg,				\
+		      pedometer_check, pedometer_extract)))      \
+	IF_ENABLED(CONFIG_APP_IMPACT,								\
+		   (X(IMPACT, impact_chan,							\
+		      struct impact_msg, struct impact_msg,					\
+		      impact_check, impact_extract)))
 #define STORAGE_DATA_TYPE(_name)								\
 	STORAGE_TYPE_ ## _name
 
