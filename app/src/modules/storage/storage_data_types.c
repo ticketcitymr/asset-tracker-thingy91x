@@ -87,8 +87,6 @@ void location_extract(const struct location_msg *msg, struct location_msg *data)
 }
 #endif /* CONFIG_APP_LOCATION */
 
-/* Environmental module storage */
-#ifdef CONFIG_APP_ENVIRONMENTAL
 /* Orientation module storage */
 #ifdef CONFIG_APP_ORIENTATION
 
@@ -103,6 +101,10 @@ void orientation_extract(const struct orientation_msg *msg,
 	*data = *msg;
 }
 #endif /* CONFIG_APP_ORIENTATION */
+
+/* Environmental module storage */
+#ifdef CONFIG_APP_ENVIRONMENTAL
+
 /* Provide functions used by storage module to check and extract data */
 bool environmental_check(const struct environmental_msg *msg)
 {

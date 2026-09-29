@@ -48,6 +48,22 @@ struct environmental_msg {
 	/** Contains the current pressure in Pa. */
 	double pressure;
 
+	/** Indoor air quality index from the BSEC library, 0 (clean) to 500 (heavily polluted).
+	 *  Only meaningful when iaq_accuracy is above 0. Zero when CONFIG_BME68X_IAQ is disabled.
+	 */
+	double iaq;
+
+	/** Estimated CO2 equivalent in ppm from the BSEC library. */
+	double co2;
+
+	/** Estimated breath VOC equivalent in ppm from the BSEC library. */
+	double voc;
+
+	/** BSEC accuracy of the air quality values: 0 unreliable, 1 low, 2 medium, 3 high.
+	 *  The values improve as the sensor calibrates over hours to days.
+	 */
+	int iaq_accuracy;
+
 	/** Timestamp when the sample was taken in milliseconds.
 	 *  This is either:
 	 * - Unix time in milliseconds if the system clock was synchronized at sampling time, or

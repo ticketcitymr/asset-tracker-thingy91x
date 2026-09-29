@@ -12,6 +12,10 @@
 #include <zephyr/smf.h>
 #include <date_time.h>
 
+#if defined(CONFIG_BME68X_IAQ)
+#include <drivers/bme68x_iaq.h>
+#endif
+
 #include "app_common.h"
 #include "environmental.h"
 
@@ -121,6 +125,29 @@ static void sample_sensors(const struct device *const bme680)
 		.timestamp = k_uptime_get(),
 	};
 
+#if defined(CONFIG_BME68X_IAQ)
+	/* Air quality values come from the BSEC library through the bme68x_iaq driver.
+	 * A failed read here is not fatal: temperature, pressure and humidity are still valid,
+	 * so the air quality fields stay at zero with accuracy 0 (unreliable).
+	 */
+	struct sensor_value iaq = { 0 };
+	struct sensor_value co2 = { 0 };
+	struct sensor_value voc = { 0 };
+	struct sensor_value iaq_acc = { 0 };
+
+	if (sensor_channel_get(bme680, SENSOR_CHAN_IAQ, &iaq) == 0 &&
+	    sensor_channel_get(bme680, SENSOR_CHAN_CO2, &co2) == 0 &&
+	    sensor_channel_get(bme680, SENSOR_CHAN_VOC, &voc) == 0 &&
+	    sensor_channel_get(bme680, SENSOR_CHAN_IAQ_ACC, &iaq_acc) == 0) {
+		msg.iaq = sensor_value_to_double(&iaq);
+		msg.co2 = sensor_value_to_double(&co2);
+		msg.voc = sensor_value_to_double(&voc);
+		msg.iaq_accuracy = iaq_acc.val1;
+	} else {
+		LOG_WRN("Air quality values not available yet");
+	}
+#endif /* CONFIG_BME68X_IAQ */
+
 	err = date_time_now(&msg.timestamp);
 	if (err != 0 && err != -ENODATA) {
 		LOG_ERR("date_time_now, error: %d", err);
@@ -131,6 +158,10 @@ static void sample_sensors(const struct device *const bme680)
 	/* Log the environmental values and limit to 2 decimals */
 	LOG_DBG("Temperature: %.2f C, Pressure: %.2f Pa, Humidity: %.2f %%",
 		msg.temperature, msg.pressure, msg.humidity);
+#if defined(CONFIG_BME68X_IAQ)
+	LOG_DBG("IAQ: %.1f, CO2: %.0f ppm, VOC: %.2f ppm, accuracy: %d",
+		msg.iaq, msg.co2, msg.voc, msg.iaq_accuracy);
+#endif
 
 	err = zbus_chan_pub(&environmental_chan, &msg, PUB_TIMEOUT);
 	if (err) {
