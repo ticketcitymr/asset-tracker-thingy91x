@@ -1,0 +1,13 @@
+diff --git a/drivers/sensor/adi/adxl367/adxl367.c b/drivers/sensor/adi/adxl367/adxl367.c
+index bd5eb5e3200..e48c8809e8a 100644
+--- a/drivers/sensor/adi/adxl367/adxl367.c
++++ b/drivers/sensor/adi/adxl367/adxl367.c
+@@ -1118,7 +1118,7 @@ static int adxl367_init(const struct device *dev)
+ 		.autosleep = false,							\
+ 		.low_noise = false,							\
+ 		.temp_en = true,							\
+-		.range = ADXL367_2G_RANGE,						\
++		.range = ADXL367_8G_RANGE,						\
+ 		.activity_th.value = CONFIG_ADXL367_ACTIVITY_THRESHOLD,			\
+ 		.activity_th.referenced =						\
+ 			IS_ENABLED(CONFIG_ADXL367_REFERENCED_ACTIVITY_DETECTION_MODE),	\
