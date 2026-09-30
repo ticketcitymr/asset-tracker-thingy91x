@@ -290,6 +290,111 @@ static void update_activity_summary(double g, int64_t now_ts)
 	activity_ticks_left = ACTIVITY_REPORT_TICKS;
 }
 
+#if defined(CONFIG_APP_IMPACT_FREE_FALL)
+/* Free-fall detection. A falling device reads near-zero acceleration
+ * magnitude, because the sensor falls with it. The state machine is:
+ *   IDLE    -> magnitude drops below the threshold       -> FALLING
+ *   FALLING -> magnitude recovers after at least MIN_MS  -> LANDING
+ *           -> magnitude recovers too soon (a bump)      -> IDLE
+ *           -> stays low longer than MAX_MS (sensor fault) -> IDLE
+ *   LANDING -> after the landing window, report the fall -> IDLE
+ * Only ever touched from the impact sample work item - no locking needed.
+ */
+enum free_fall_state {
+	FF_IDLE,
+	FF_FALLING,
+	FF_LANDING,
+};
+
+static enum free_fall_state ff_state;
+static int64_t ff_start_ms;
+static int64_t ff_end_ms;
+static int64_t ff_debounce_until_ms;
+static uint32_t ff_duration_ms;
+static double ff_landing_peak_g;
+static int64_t ff_landing_peak_ts;
+
+static void report_free_fall(uint32_t fall_ms, double landing_peak_g, int64_t timestamp)
+{
+	int err;
+	struct impact_msg msg = {
+		.type = IMPACT_FREE_FALL,
+		.fall_ms = fall_ms,
+		.peak_g = landing_peak_g,
+		.timestamp = timestamp,
+	};
+	struct storage_msg flush_msg = {
+		.type = STORAGE_FLUSH,
+	};
+
+	LOG_WRN("Free fall detected: %u ms, landing peak %.2f g", fall_ms, landing_peak_g);
+
+	err = zbus_chan_pub(&impact_chan, &msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish free fall message, error: %d", err);
+		SEND_FATAL_ERROR();
+		return;
+	}
+
+	/* A fall is urgent, same as a hard impact: deliver right away instead
+	 * of waiting for the next periodic batch.
+	 */
+	err = zbus_chan_pub(&storage_chan, &flush_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish storage flush request, error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+}
+
+static void update_free_fall(double g, int64_t now)
+{
+	const double threshold_g = CONFIG_APP_IMPACT_FREE_FALL_THRESHOLD_MG / 1000.0;
+
+	switch (ff_state) {
+	case FF_IDLE:
+		if (now >= ff_debounce_until_ms && g < threshold_g) {
+			ff_state = FF_FALLING;
+			ff_start_ms = now;
+		}
+		break;
+	case FF_FALLING:
+		if (g < threshold_g) {
+			if ((now - ff_start_ms) > CONFIG_APP_IMPACT_FREE_FALL_MAX_MS) {
+				/* Stuck near zero: treat as a sensor fault, not a fall. */
+				ff_state = FF_IDLE;
+				ff_debounce_until_ms = now + CONFIG_APP_IMPACT_FREE_FALL_DEBOUNCE_MS;
+			}
+			break;
+		}
+
+		ff_duration_ms = (uint32_t)(now - ff_start_ms);
+		if (ff_duration_ms < CONFIG_APP_IMPACT_FREE_FALL_MIN_MS) {
+			/* Too brief: a bump or pothole, not a fall. */
+			ff_state = FF_IDLE;
+			break;
+		}
+
+		ff_state = FF_LANDING;
+		ff_end_ms = now;
+		ff_landing_peak_g = g;
+		ff_landing_peak_ts = timestamp_now();
+		break;
+	case FF_LANDING:
+		if (g > ff_landing_peak_g) {
+			ff_landing_peak_g = g;
+			ff_landing_peak_ts = timestamp_now();
+		}
+
+		if ((now - ff_end_ms) >= CONFIG_APP_IMPACT_FREE_FALL_LANDING_WINDOW_MS) {
+			report_free_fall(ff_duration_ms, ff_landing_peak_g, ff_landing_peak_ts);
+			ff_state = FF_IDLE;
+			ff_debounce_until_ms = now + CONFIG_APP_IMPACT_FREE_FALL_DEBOUNCE_MS;
+		}
+		break;
+	}
+}
+#endif /* CONFIG_APP_IMPACT_FREE_FALL */
+
 static void sample_for_impact_detection(struct k_work *work)
 {
 	int err;
@@ -324,6 +429,10 @@ if (++dbg_counter % 25 == 0) {
 }
 	update_motion_state(g);
 	update_activity_summary(g, timestamp_now());
+#if defined(CONFIG_APP_IMPACT_FREE_FALL)
+	/* Runs before the impact-capture branch below, which returns early. */
+	update_free_fall(g, now);
+#endif
 	if (capturing) {
 		if (g > capture_peak_g) {
 			capture_peak_g = g;

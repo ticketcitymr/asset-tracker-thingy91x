@@ -30,10 +30,23 @@ enum impact_msg_type {
 	 * of a reportable "impact".
 	 */
 	IMPACT_ACTIVITY_SUMMARY = 0x2,
+
+	/* Published when free fall (near-zero acceleration for a short time,
+	 * see CONFIG_APP_IMPACT_FREE_FALL) has ended and the landing capture
+	 * window has closed. fall_ms is the free-fall duration and peak_g is
+	 * the highest acceleration seen while landing.
+	 */
+	IMPACT_FREE_FALL = 0x3,
 };
 
 struct impact_msg {
 	enum impact_msg_type type;
+
+	/* Free-fall duration in milliseconds. Only set for IMPACT_FREE_FALL.
+	 * Placed here so it fills the padding after the enum and the struct
+	 * does not grow (the storage ring buffers are sized by struct size).
+	 */
+	uint32_t fall_ms;
 
 	/* Peak acceleration magnitude observed during the triggering event, in g. */
 	double peak_g;

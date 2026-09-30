@@ -80,6 +80,58 @@ config APP_IMPACT_ACTIVITY_REPORT_INTERVAL_SECONDS
           nothing rose to the level of a reportable impact. Independent of
           CONFIG_APP_IMPACT_THRESHOLD_MG and CONFIG_APP_IMPACT_DEBOUNCE_MS,
           which govern the separate hard-impact alert path.
+config APP_IMPACT_FREE_FALL
+	bool "Free-fall detection"
+	default y
+	help
+	  Detect free fall: acceleration magnitude stays near zero for a short
+	  time (the device is falling or thrown), followed by a landing. Uses
+	  the same accelerometer samples as impact detection. Reported as a
+	  separate "FALL" message, with the free-fall duration and the peak g
+	  seen while landing, so the receiver can tell a real fall from a
+	  dropped-but-caught device.
+
+config APP_IMPACT_FREE_FALL_THRESHOLD_MG
+	int "Free-fall threshold in milli-g"
+	depends on APP_IMPACT_FREE_FALL
+	default 400
+	help
+	  Acceleration magnitude below this value counts as "falling".
+	  Standing still reads about 1000 mg; true free fall reads near 0.
+
+config APP_IMPACT_FREE_FALL_MIN_MS
+	int "Minimum free-fall duration in milliseconds"
+	depends on APP_IMPACT_FREE_FALL
+	default 120
+	help
+	  The magnitude must stay below the threshold for at least this long.
+	  Filters out bumps and potholes, which dip below the threshold only
+	  briefly. A drop of 0.5 m lasts about 320 ms.
+
+config APP_IMPACT_FREE_FALL_MAX_MS
+	int "Maximum free-fall duration in milliseconds"
+	depends on APP_IMPACT_FREE_FALL
+	default 1500
+	help
+	  If the magnitude stays below the threshold longer than this, it is
+	  treated as a sensor fault rather than a fall (1.5 s is about 11 m).
+
+config APP_IMPACT_FREE_FALL_LANDING_WINDOW_MS
+	int "Landing capture window in milliseconds"
+	depends on APP_IMPACT_FREE_FALL
+	default 500
+	help
+	  After free fall ends, keep sampling this long and report the highest
+	  g seen, as the landing impact.
+
+config APP_IMPACT_FREE_FALL_DEBOUNCE_MS
+	int "Debounce after a reported fall in milliseconds"
+	depends on APP_IMPACT_FREE_FALL
+	default 5000
+	help
+	  Minimum time after a reported fall before another can be detected,
+	  so one fall that bounces does not produce a flood of reports.
+
 module = APP_IMPACT
 module-str = Impact detection module
 source "subsys/logging/Kconfig.template.log_config"
