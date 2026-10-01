@@ -75,6 +75,15 @@ struct orientation_msg {
 	 * Only valid for ORIENTATION_SAMPLE_RESPONSE events.
 	 */
 	int64_t timestamp;
+
+	/** Magnetometer (BMM350) reading in microtesla, device axes, uncalibrated.
+	 *  Valid only when mag_valid is true. Hard-iron calibration and the
+	 *  tilt-compensated compass heading are done on the server.
+	 */
+	float mx;
+	float my;
+	float mz;
+	bool mag_valid;
 };
 
 /** @brief Convert a face enum value to its string name (e.g. "Z_UP"). */

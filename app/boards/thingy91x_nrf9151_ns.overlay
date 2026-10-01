@@ -13,6 +13,13 @@
 	status = "okay";
 };
 
+/* Magnetometer for the compass. Low rate and no oversampling to save power. */
+&magnetometer {
+	status = "okay";
+	odr = "6.25";
+	osr = <1>;
+};
+
 / {
 	aliases {
 		accelerometer = &accelerometer_lp;

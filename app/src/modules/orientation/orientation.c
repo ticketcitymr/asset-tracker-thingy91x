@@ -63,6 +63,37 @@ struct orientation_state_object {
 
 static const struct device *const accel_dev = DEVICE_DT_GET(DT_ALIAS(accelerometer));
 
+/* Magnetometer (BMM350), optional: only when the node is enabled and the driver is on */
+#if defined(CONFIG_BMM350) && DT_NODE_HAS_STATUS(DT_NODELABEL(magnetometer), okay)
+#define HAVE_MAGNETOMETER 1
+static const struct device *const mag_dev = DEVICE_DT_GET(DT_NODELABEL(magnetometer));
+#endif
+
+#if defined(HAVE_MAGNETOMETER)
+/* Read the magnetometer into msg, in microtesla (Zephyr reports gauss; 1 G = 100 uT). */
+static void sample_magnetometer(struct orientation_msg *msg)
+{
+	struct sensor_value mag_xyz[3];
+
+	msg->mag_valid = false;
+
+	if (!device_is_ready(mag_dev)) {
+		return;
+	}
+
+	if (sensor_sample_fetch_chan(mag_dev, SENSOR_CHAN_MAGN_XYZ) ||
+	    sensor_channel_get(mag_dev, SENSOR_CHAN_MAGN_XYZ, mag_xyz)) {
+		LOG_WRN("Magnetometer read failed");
+		return;
+	}
+
+	msg->mx = (float)(sensor_value_to_double(&mag_xyz[0]) * 100.0);
+	msg->my = (float)(sensor_value_to_double(&mag_xyz[1]) * 100.0);
+	msg->mz = (float)(sensor_value_to_double(&mag_xyz[2]) * 100.0);
+	msg->mag_valid = true;
+}
+#endif /* HAVE_MAGNETOMETER */
+
 const char *orientation_face_to_str(enum orientation_face face)
 {
 	switch (face) {
@@ -175,6 +206,10 @@ static void sample_orientation(const struct device *const accel)
 	msg.x = x;
 	msg.y = y;
 	msg.z = z;
+
+#if defined(HAVE_MAGNETOMETER)
+	sample_magnetometer(&msg);
+#endif
 
 	if (date_time_now(&msg.timestamp)) {
 		/* Fall back to uptime if the system clock isn't synchronized yet */

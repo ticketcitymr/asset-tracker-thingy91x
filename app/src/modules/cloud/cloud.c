@@ -703,6 +703,8 @@ static void handle_cloud_channel_message(struct cloud_state_object const *state_
 		if (err) {
 			LOG_ERR("nrf_cloud_coap_json_message_send, error: %d", err);
 			send_request_failed();
+		} else {
+			LOG_WRN("JSON message sent to cloud: %s", (char *)msg->payload.buffer);
 		}
 		break;
 	case CLOUD_SHADOW_GET_DELTA:

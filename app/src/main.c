@@ -11,6 +11,7 @@
 #include <zephyr/task_wdt/task_wdt.h>
 #include <zephyr/smf.h>
 #include <zephyr/sys/reboot.h>
+#include <date_time.h>
 
 #include "app_common.h"
 #include "network.h"
@@ -584,6 +585,137 @@ static void cloud_send_now(struct main_state *state_object)
 #endif /* CONFIG_APP_LED */
 }
 
+#if defined(CONFIG_APP_PANIC)
+/* Panic mode: started and ended with the multi-press button gesture. While active
+ * the sampling interval is shortened, every sample is sent to the cloud at once,
+ * and a PANIC message is sent immediately and then repeated until panic ends.
+ */
+static bool panic_active;
+static uint32_t panic_count;
+static struct k_work_delayable panic_expire_work;
+static struct k_work_delayable panic_beacon_work;
+
+static void panic_beacon_work_fn(struct k_work *work)
+{
+	/* static: too big for the system workqueue stack */
+	static struct cloud_msg msg = { .type = CLOUD_PAYLOAD_JSON };
+	const bool active = panic_active;
+	int64_t ts = 0;
+	int len;
+	int err;
+
+	ARG_UNUSED(work);
+
+	if (date_time_now(&ts) || ts <= 0) {
+		len = snprintk((char *)msg.payload.buffer, sizeof(msg.payload.buffer),
+			       "{\"appId\":\"PANIC\",\"messageType\":\"DATA\","
+			       "\"data\":{\"active\":%s,\"n\":%u}}",
+			       active ? "true" : "false", (unsigned int)panic_count);
+	} else {
+		len = snprintk((char *)msg.payload.buffer, sizeof(msg.payload.buffer),
+			       "{\"appId\":\"PANIC\",\"messageType\":\"DATA\",\"ts\":%lld,"
+			       "\"data\":{\"active\":%s,\"n\":%u}}",
+			       ts, active ? "true" : "false", (unsigned int)panic_count);
+	}
+
+	if (len > 0 && len < (int)sizeof(msg.payload.buffer)) {
+		msg.payload.buffer_data_len = len;
+
+		err = zbus_chan_pub(&cloud_chan, &msg, PUB_TIMEOUT);
+		if (err) {
+			LOG_ERR("Failed to publish panic message, error: %d", err);
+		} else {
+			LOG_WRN("Panic message queued for cloud: %s", (char *)msg.payload.buffer);
+		}
+	} else {
+		LOG_ERR("Panic message does not fit the payload buffer, len %d", len);
+	}
+
+	if (active) {
+		k_work_reschedule(&panic_beacon_work, K_SECONDS(CONFIG_APP_PANIC_BEACON_SECONDS));
+	}
+}
+
+static void panic_expire_work_fn(struct k_work *work)
+{
+	/* End panic by replaying the gesture, so it goes through the normal handler */
+	const struct button_msg msg = {
+		.type = BUTTON_PRESS_TRIPLE,
+		.button_number = 1,
+	};
+
+	ARG_UNUSED(work);
+
+	LOG_WRN("Panic mode timed out");
+
+	if (zbus_chan_pub(&button_chan, &msg, PUB_TIMEOUT)) {
+		LOG_ERR("Failed to publish panic end message");
+	}
+}
+
+static void panic_set(struct main_state *state_object, bool on)
+{
+	int err;
+	uint32_t interval;
+	struct storage_msg storage_msg = { .type = STORAGE_SET_THRESHOLD };
+	const struct timer_msg timer_msg = { .type = TIMER_CONFIG_CHANGED };
+
+	if (on == panic_active) {
+		return;
+	}
+
+	panic_active = on;
+	LOG_WRN("Panic mode %s", on ? "STARTED" : "ended");
+
+	if (on) {
+		panic_count++;
+		interval = CONFIG_APP_PANIC_SAMPLING_INTERVAL_SECONDS;
+		/* Make the next sample due straight away */
+		state_object->sample_start_time = k_uptime_seconds() - interval - 1;
+		/* Send every sample as soon as it has been taken */
+		storage_msg.data_len = 1;
+		k_work_reschedule(&panic_expire_work, K_MINUTES(CONFIG_APP_PANIC_DURATION_MINUTES));
+	} else {
+		interval = (uint32_t)CONFIG_APP_SAMPLING_INTERVAL_SECONDS;
+		state_object->sample_start_time = k_uptime_seconds();
+		storage_msg.data_len = state_object->storage_threshold;
+		k_work_cancel_delayable(&panic_expire_work);
+	}
+
+	state_object->sample_interval_sec = interval;
+
+	/* PANIC message now (runs again every beacon interval while active; once more on end) */
+	k_work_reschedule(&panic_beacon_work, K_NO_WAIT);
+
+	err = zbus_chan_pub(&storage_chan, &storage_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish storage threshold, error: %d", err);
+	}
+
+	err = zbus_chan_pub(&timer_chan, &timer_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish timer config changed event, error: %d", err);
+	}
+
+#if defined(CONFIG_APP_LED)
+	struct led_msg led_msg = {
+		.type = LED_RGB_SET,
+		.red = on ? 255 : 0,
+		.green = on ? 0 : 255,
+		.blue = 0,
+		.duration_on_msec = on ? 300 : 500,
+		.duration_off_msec = on ? 300 : 500,
+		.repetitions = on ? 40 : 3,
+	};
+
+	err = zbus_chan_pub(&led_chan, &led_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish LED pattern message, error: %d", err);
+	}
+#endif /* CONFIG_APP_LED */
+}
+#endif /* CONFIG_APP_PANIC */
+
 static void timer_sample_data_work_fn(struct k_work *work)
 {
 	int err;
@@ -955,6 +1087,19 @@ static enum smf_state_result running_run(void *o)
 		}
 	}
 
+#if defined(CONFIG_APP_PANIC)
+	/* Panic gesture: start panic mode, or end it if already active */
+	else if (state_object->chan == &button_chan) {
+		const struct button_msg *msg = (const struct button_msg *)state_object->msg_buf;
+
+		if (msg->type == BUTTON_PRESS_TRIPLE) {
+			panic_set(state_object, !panic_active);
+
+			return SMF_EVENT_HANDLED;
+		}
+	}
+#endif /* CONFIG_APP_PANIC */
+
 #if defined(CONFIG_APP_IMPACT)
 	/* Handle motion state changes: speed up sampling while moving, relax back
 	 * to the configured interval once still again. Placed here (the
@@ -966,6 +1111,13 @@ static enum smf_state_result running_run(void *o)
 		uint32_t new_interval = msg->is_moving ?
 			CONFIG_APP_SAMPLING_INTERVAL_ACTIVE_SECONDS :
 			CONFIG_APP_SAMPLING_INTERVAL_SECONDS;
+
+#if defined(CONFIG_APP_PANIC)
+		if (panic_active) {
+			/* Panic mode keeps its own fast interval */
+			return SMF_EVENT_HANDLED;
+		}
+#endif /* CONFIG_APP_PANIC */
 
 		if (state_object->sample_interval_sec != new_interval) {
 			int err;
@@ -1509,6 +1661,11 @@ int main(void)
 	};
 
 	LOG_INF("Main has started");
+
+#if defined(CONFIG_APP_PANIC)
+	k_work_init_delayable(&panic_expire_work, panic_expire_work_fn);
+	k_work_init_delayable(&panic_beacon_work, panic_beacon_work_fn);
+#endif /* CONFIG_APP_PANIC */
 
 	task_wdt_id = task_wdt_add(wdt_timeout_ms, task_wdt_callback, (void *)k_current_get());
 	if (task_wdt_id < 0) {

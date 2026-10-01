@@ -21,6 +21,32 @@ config APP_SAMPLING_INTERVAL_ACTIVE_SECONDS
 	  until a sustained period of stillness is detected again (see
 	  CONFIG_APP_IMPACT_MOTION_STILL_TIMEOUT_SECONDS).
 
+config APP_PANIC
+	bool "Panic mode (press the button several times)"
+	depends on APP_BUTTON
+	default y
+	help
+	  Pressing button 1 CONFIG_APP_BUTTON_PANIC_PRESSES times quickly starts panic
+	  mode: a PANIC message is sent to the cloud right away and repeated, location
+	  and sensors are sampled at the panic interval, and every sample is sent at once.
+	  The same gesture again ends it, otherwise it ends by itself after
+	  CONFIG_APP_PANIC_DURATION_MINUTES.
+
+config APP_PANIC_SAMPLING_INTERVAL_SECONDS
+	int "Sampling interval in panic mode"
+	default 30
+	depends on APP_PANIC
+
+config APP_PANIC_DURATION_MINUTES
+	int "Panic mode ends by itself after this many minutes"
+	default 30
+	depends on APP_PANIC
+
+config APP_PANIC_BEACON_SECONDS
+	int "How often the PANIC message is repeated while in panic mode"
+	default 20
+	depends on APP_PANIC
+
 config APP_WATCHDOG_TIMEOUT_SECONDS
 	int "Watchdog timeout"
 	default 180

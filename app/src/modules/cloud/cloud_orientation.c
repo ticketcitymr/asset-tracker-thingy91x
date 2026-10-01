@@ -27,24 +27,30 @@ int cloud_orientation_send(const struct orientation_msg *ori,
 			   bool confirmable)
 {
 	int err;
-	char json[256];
+	char json[320];
+	char mag[64] = "";
+
+	if (ori->mag_valid) {
+		snprintk(mag, sizeof(mag), ",\"mx\":%.1f,\"my\":%.1f,\"mz\":%.1f",
+			 (double)ori->mx, (double)ori->my, (double)ori->mz);
+	}
 
 	if (timestamp_ms > 0) {
 		err = snprintk(json, sizeof(json),
 			"{\"appId\":\"%s\",\"messageType\":\"DATA\",\"ts\":%lld,"
 			"\"data\":{\"face\":\"%s\",\"tilt\":%.1f,"
-			"\"x\":%.2f,\"y\":%.2f,\"z\":%.2f}}",
+			"\"x\":%.2f,\"y\":%.2f,\"z\":%.2f%s}}",
 			CUSTOM_JSON_APPID_VAL_ORIENTATION, timestamp_ms,
 			orientation_face_to_str(ori->face), ori->tilt_deg,
-			ori->x, ori->y, ori->z);
+			ori->x, ori->y, ori->z, mag);
 	} else {
 		err = snprintk(json, sizeof(json),
 			"{\"appId\":\"%s\",\"messageType\":\"DATA\","
 			"\"data\":{\"face\":\"%s\",\"tilt\":%.1f,"
-			"\"x\":%.2f,\"y\":%.2f,\"z\":%.2f}}",
+			"\"x\":%.2f,\"y\":%.2f,\"z\":%.2f%s}}",
 			CUSTOM_JSON_APPID_VAL_ORIENTATION,
 			orientation_face_to_str(ori->face), ori->tilt_deg,
-			ori->x, ori->y, ori->z);
+			ori->x, ori->y, ori->z, mag);
 	}
 
 	if (err < 0 || err >= (int)sizeof(json)) {

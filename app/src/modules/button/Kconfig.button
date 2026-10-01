@@ -25,6 +25,21 @@ config APP_BUTTON_LONG_PRESS_TIMEOUT_MS
 	  a long press. Short presses are detected when the button is
 	  released before this timeout expires.
 
+config APP_BUTTON_PANIC_PRESSES
+	int "Presses that make the panic gesture"
+	default 3
+	range 2 10
+	depends on APP_PANIC
+
+config APP_BUTTON_MULTI_PRESS_WINDOW_MS
+	int "Window to count repeated presses, in milliseconds"
+	default 800
+	range 200 3000
+	depends on APP_PANIC
+	help
+	  Presses closer together than this count towards the panic gesture.
+	  A single press is reported this long after release.
+
 module = APP_BUTTON
 module-str = Button
 source "subsys/logging/Kconfig.template.log_config"

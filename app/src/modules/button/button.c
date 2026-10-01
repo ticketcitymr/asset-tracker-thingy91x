@@ -23,6 +23,8 @@ LOG_MODULE_REGISTER(button, CONFIG_APP_BUTTON_LOG_LEVEL);
 static struct {
 	uint32_t pressed_buttons;
 	struct k_work_delayable long_press_work;
+	struct k_work_delayable multi_press_work;
+	uint8_t press_count;
 } button_state;
 
 /* Define channels provided by this module */
@@ -75,6 +77,39 @@ static void publish_short_press(uint8_t button_number)
 	}
 }
 
+#if defined(CONFIG_APP_PANIC)
+/* Fires once the multi-press window has closed with no further press. A run of
+ * CONFIG_APP_BUTTON_PANIC_PRESSES or more quick presses is the panic gesture;
+ * anything shorter is reported as a normal short press.
+ */
+static void multi_press_work_handler(struct k_work *work)
+{
+	int err;
+	uint8_t count = button_state.press_count;
+
+	ARG_UNUSED(work);
+
+	button_state.press_count = 0;
+
+	if (count >= CONFIG_APP_BUTTON_PANIC_PRESSES) {
+		struct button_msg msg = {
+			.button_number = 1,
+			.type = BUTTON_PRESS_TRIPLE,
+		};
+
+		LOG_WRN("Button 1 panic gesture (%u presses)", count);
+
+		err = zbus_chan_pub(&button_chan, &msg, PUB_TIMEOUT);
+		if (err) {
+			LOG_ERR("zbus_chan_pub panic press, error: %d", err);
+			SEND_FATAL_ERROR();
+		}
+	} else {
+		publish_short_press(1);
+	}
+}
+#endif /* CONFIG_APP_PANIC */
+
 /* Button handler called when a user pushes a button */
 static void button_handler(uint32_t button_states, uint32_t has_changed)
 {
@@ -96,7 +131,16 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 			(void)k_work_cancel_delayable(&button_state.long_press_work);
 
 			/* Timer was running, this is a short press */
+#if defined(CONFIG_APP_PANIC)
+			/* Count it, and decide what it was once the window closes */
+			if (button_state.press_count < UINT8_MAX) {
+				button_state.press_count++;
+			}
+			k_work_reschedule(&button_state.multi_press_work,
+					  K_MSEC(CONFIG_APP_BUTTON_MULTI_PRESS_WINDOW_MS));
+#else
 			publish_short_press(1);
+#endif /* CONFIG_APP_PANIC */
 		}
 	}
 }
@@ -112,6 +156,10 @@ static int button_init(void)
 
 	k_work_init_delayable(&button_state.long_press_work,
 			      long_press_work_handler);
+#if defined(CONFIG_APP_PANIC)
+	k_work_init_delayable(&button_state.multi_press_work,
+			      multi_press_work_handler);
+#endif /* CONFIG_APP_PANIC */
 
 	err = dk_buttons_init(button_handler);
 	if (err) {

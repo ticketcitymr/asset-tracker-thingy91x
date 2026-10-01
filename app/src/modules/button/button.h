@@ -23,6 +23,11 @@ enum button_msg_type {
 
 	/** Long button press detected */
 	BUTTON_PRESS_LONG,
+
+	/** Several quick presses in a row (CONFIG_APP_BUTTON_PANIC_PRESSES), used as the
+	 *  panic gesture. Only published when CONFIG_APP_PANIC is enabled.
+	 */
+	BUTTON_PRESS_TRIPLE,
 };
 
 /** @brief Button message data structure */
