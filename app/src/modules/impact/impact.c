@@ -466,7 +466,6 @@ static void impact_module_thread(void)
 {
 	if (!device_is_ready(accel_dev)) {
 		LOG_ERR("Accelerometer device not ready");
-		SEND_FATAL_ERROR();
 		return;
 	}
 

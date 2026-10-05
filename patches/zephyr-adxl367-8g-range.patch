@@ -1,7 +1,18 @@
 diff --git a/drivers/sensor/adi/adxl367/adxl367.c b/drivers/sensor/adi/adxl367/adxl367.c
-index bd5eb5e3200..e48c8809e8a 100644
+index bd5eb5e3200..e4b84ce83b6 100644
 --- a/drivers/sensor/adi/adxl367/adxl367.c
 +++ b/drivers/sensor/adi/adxl367/adxl367.c
+@@ -418,8 +418,8 @@ int adxl367_self_test(const struct device *dev)
+ 	}
+ 
+ 	dif = x_axis_2 - x_axis_1;
+-	min = ADXL367_SELF_TEST_MIN * adxl367_scale_mul[data->range];
+-	max = ADXL367_SELF_TEST_MAX * adxl367_scale_mul[data->range];
++	min = ADXL367_SELF_TEST_MIN * adxl367_scale_mul[ADXL367_2G_RANGE];
++	max = ADXL367_SELF_TEST_MAX * adxl367_scale_mul[ADXL367_2G_RANGE];
+ 
+ 	if ((dif >= min) && (dif <= max)) {
+ 		LOG_INF("ADXL367 passed self-test\n");
 @@ -1118,7 +1118,7 @@ static int adxl367_init(const struct device *dev)
  		.autosleep = false,							\
  		.low_noise = false,							\
