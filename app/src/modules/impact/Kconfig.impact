@@ -132,6 +132,50 @@ config APP_IMPACT_FREE_FALL_DEBOUNCE_MS
 	  Minimum time after a reported fall before another can be detected,
 	  so one fall that bounces does not produce a flood of reports.
 
+config APP_IMPACT_MANDOWN
+	bool "Man-down check after a hard impact or fall"
+	default y
+	help
+	  After a reported impact or fall, watch the next seconds: if the tracker stays still AND its
+	  orientation changed (lying down compared with before), send a MAN_DOWN message. A slammed
+	  door followed by walking, or sitting down in a car, does not send anything.
+
+config APP_IMPACT_MANDOWN_SETTLE_MS
+	int "Ignore time right after the event in milliseconds"
+	depends on APP_IMPACT_MANDOWN
+	default 3000
+	help
+	  Landing, bouncing and sliding after the event are ignored for this long.
+
+config APP_IMPACT_MANDOWN_WATCH_MS
+	int "Stillness watch time in milliseconds"
+	depends on APP_IMPACT_MANDOWN
+	default 45000
+	help
+	  How long the tracker must stay (almost) still after the settle time.
+
+config APP_IMPACT_MANDOWN_STILL_MG
+	int "Stillness threshold in milli-g"
+	depends on APP_IMPACT_MANDOWN
+	default 80
+	help
+	  A one-second window in which no axis varies by more than this counts as still.
+
+config APP_IMPACT_MANDOWN_MAX_MOVING_WINDOWS
+	int "Moving seconds tolerated during the watch"
+	depends on APP_IMPACT_MANDOWN
+	default 2
+	help
+	  A person who is down may twitch. More moving seconds than this cancels the watch.
+
+config APP_IMPACT_MANDOWN_TILT_MIN_DEG
+	int "Minimum orientation change in degrees"
+	depends on APP_IMPACT_MANDOWN
+	default 40
+	help
+	  The angle between the tracker's orientation just before the event and its orientation at the
+	  end of the watch must be at least this, otherwise nothing is sent.
+
 module = APP_IMPACT
 module-str = Impact detection module
 source "subsys/logging/Kconfig.template.log_config"

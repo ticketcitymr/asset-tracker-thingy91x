@@ -5,4 +5,4 @@
 #
 
 target_include_directories(app PRIVATE .)
-target_sources(app PRIVATE impact.c)
+target_sources(app PRIVATE impact.c post_impact.c)

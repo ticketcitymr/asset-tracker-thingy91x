@@ -138,7 +138,8 @@ bool impact_check(const struct impact_msg *msg)
 {
 	return msg->type == IMPACT_SAMPLE_RESPONSE ||
 	       msg->type == IMPACT_ACTIVITY_SUMMARY ||
-	       msg->type == IMPACT_FREE_FALL;
+	       msg->type == IMPACT_FREE_FALL ||
+	       msg->type == IMPACT_MAN_DOWN;
 }
 
 void impact_extract(const struct impact_msg *msg, struct impact_msg *data)

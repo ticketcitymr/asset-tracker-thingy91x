@@ -37,6 +37,13 @@ enum impact_msg_type {
 	 * the highest acceleration seen while landing.
 	 */
 	IMPACT_FREE_FALL = 0x3,
+
+	/* Published when the post-impact watcher (CONFIG_APP_IMPACT_MANDOWN) saw a hard impact or fall
+	 * followed by stillness AND a change in orientation: someone may be down. Packed into the
+	 * existing fields so the struct does not grow: peak_g = the triggering peak and
+	 * fall_ms = (still_seconds << 16) | (from_fall << 15) | tilt_degrees (0..180).
+	 */
+	IMPACT_MAN_DOWN = 0x4,
 };
 
 struct impact_msg {

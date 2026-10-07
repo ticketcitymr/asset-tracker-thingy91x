@@ -14,6 +14,7 @@
 
 #include "app_common.h"
 #include "impact.h"
+#include "post_impact.h"
 #include "storage.h"
 
 /* Register log module */
@@ -51,6 +52,11 @@ ZBUS_CHAN_DEFINE(motion_chan,
 );
 
 static const struct device *const accel_dev = DEVICE_DT_GET(DT_ALIAS(accelerometer));
+
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+/* Post-impact watcher ("man down"). Only ever touched from the impact sample work item. */
+static struct post_impact man_down_watch;
+#endif
 
 /* Capture-in-progress state. Only ever touched from the impact sample work
  * item, which always runs on the system workqueue, so no locking is needed.
@@ -216,6 +222,10 @@ static void report_impact(double peak_g, int64_t timestamp)
 
 	LOG_WRN("Impact detected: %.2f g", peak_g);
 
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+	pi_trigger(&man_down_watch, peak_g, false, timestamp, k_uptime_get());
+#endif
+
 	err = zbus_chan_pub(&impact_chan, &msg, PUB_TIMEOUT);
 	if (err) {
 		LOG_ERR("Failed to publish impact message, error: %d", err);
@@ -290,6 +300,41 @@ static void update_activity_summary(double g, int64_t now_ts)
 	activity_ticks_left = ACTIVITY_REPORT_TICKS;
 }
 
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+static void report_man_down(const struct pi_result *r)
+{
+	int err;
+	uint32_t tilt = (uint32_t)(r->tilt_deg + 0.5);
+	uint32_t still = r->still_s > 0xffffU ? 0xffffU : r->still_s;
+	struct impact_msg msg = {
+		.type = IMPACT_MAN_DOWN,
+		.fall_ms = (still << 16) | ((r->from_fall ? 1U : 0U) << 15) | (tilt & 0x7fffU),
+		.peak_g = r->peak_g,
+		.timestamp = r->ts,
+	};
+	struct storage_msg flush_msg = {
+		.type = STORAGE_FLUSH,
+	};
+
+	LOG_WRN("Man down: peak %.2f g, tilt %u deg, still %u s, fall %d",
+		r->peak_g, tilt, still, r->from_fall);
+
+	err = zbus_chan_pub(&impact_chan, &msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish man-down message, error: %d", err);
+		SEND_FATAL_ERROR();
+		return;
+	}
+
+	/* Urgent: deliver right away, like an impact or a fall. */
+	err = zbus_chan_pub(&storage_chan, &flush_msg, PUB_TIMEOUT);
+	if (err) {
+		LOG_ERR("Failed to publish storage flush request, error: %d", err);
+		SEND_FATAL_ERROR();
+	}
+}
+#endif /* CONFIG_APP_IMPACT_MANDOWN */
+
 #if defined(CONFIG_APP_IMPACT_FREE_FALL)
 /* Free-fall detection. A falling device reads near-zero acceleration
  * magnitude, because the sensor falls with it. The state machine is:
@@ -328,6 +373,10 @@ static void report_free_fall(uint32_t fall_ms, double landing_peak_g, int64_t ti
 	};
 
 	LOG_WRN("Free fall detected: %u ms, landing peak %.2f g", fall_ms, landing_peak_g);
+
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+	pi_trigger(&man_down_watch, landing_peak_g, true, timestamp, k_uptime_get());
+#endif
 
 	err = zbus_chan_pub(&impact_chan, &msg, PUB_TIMEOUT);
 	if (err) {
@@ -429,6 +478,19 @@ if (++dbg_counter % 25 == 0) {
 }
 	update_motion_state(g);
 	update_activity_summary(g, timestamp_now());
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+	{
+		/* Same unit heuristic as normalize_to_m_s2(): the vector in g. */
+		double raw_mag = sqrt((x * x) + (y * y) + (z * z));
+		double to_g = (raw_mag < G_VS_MS2_HEURISTIC_THRESHOLD) ? 1.0 : (1.0 / STANDARD_GRAVITY);
+		struct pi_result man_down;
+
+		pi_sample(&man_down_watch, x * to_g, y * to_g, z * to_g, now);
+		if (pi_poll(&man_down_watch, &man_down)) {
+			report_man_down(&man_down);
+		}
+	}
+#endif
 #if defined(CONFIG_APP_IMPACT_FREE_FALL)
 	/* Runs before the impact-capture branch below, which returns early. */
 	update_free_fall(g, now);
@@ -485,6 +547,19 @@ static void impact_module_thread(void)
 	 * as orientation/pedometer: the nRF91 has a fixed 8-channel hardware
 	 * watchdog ceiling already claimed by other modules).
 	 */
+#if defined(CONFIG_APP_IMPACT_MANDOWN)
+	{
+		const struct pi_params params = {
+			.settle_ms = CONFIG_APP_IMPACT_MANDOWN_SETTLE_MS,
+			.watch_ms = CONFIG_APP_IMPACT_MANDOWN_WATCH_MS,
+			.still_mg = CONFIG_APP_IMPACT_MANDOWN_STILL_MG,
+			.max_moving_win = CONFIG_APP_IMPACT_MANDOWN_MAX_MOVING_WINDOWS,
+			.tilt_min_deg = CONFIG_APP_IMPACT_MANDOWN_TILT_MIN_DEG,
+		};
+
+		pi_init(&man_down_watch, &params);
+	}
+#endif
 	k_timer_start(&impact_sample_timer,
 		     K_MSEC(CONFIG_APP_IMPACT_SAMPLE_INTERVAL_MS),
 		     K_MSEC(CONFIG_APP_IMPACT_SAMPLE_INTERVAL_MS));
