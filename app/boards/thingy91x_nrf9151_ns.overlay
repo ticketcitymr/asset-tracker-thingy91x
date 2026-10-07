@@ -13,6 +13,11 @@
 	status = "okay";
 };
 
+/* Second accelerometer plus gyroscope (BMI270). Log-only for now, see CONFIG_APP_BMI270_LOG. */
+&accelerometer_hp {
+	status = "okay";
+};
+
 /* Magnetometer for the compass. Low rate and no oversampling to save power. */
 &magnetometer {
 	status = "okay";

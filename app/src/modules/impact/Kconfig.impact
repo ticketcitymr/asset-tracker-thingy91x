@@ -176,6 +176,20 @@ config APP_IMPACT_MANDOWN_TILT_MIN_DEG
 	  The angle between the tracker's orientation just before the event and its orientation at the
 	  end of the watch must be at least this, otherwise nothing is sent.
 
+config APP_BMI270_LOG
+	bool "BMI270 log-only bring-up (accelerometer +/-16 g and gyroscope)"
+	depends on BMI270
+	default n
+	help
+	  Periodically wakes the BMI270, takes a one second burst of accelerometer and gyroscope
+	  readings and writes a one-line summary to the log. Sends nothing to the cloud and changes
+	  no alerts. Use it to check the chip and measure its battery cost before building alerts on it.
+
+config APP_BMI270_LOG_PERIOD_SECONDS
+	int "Seconds between BMI270 bursts"
+	depends on APP_BMI270_LOG
+	default 10
+
 module = APP_IMPACT
 module-str = Impact detection module
 source "subsys/logging/Kconfig.template.log_config"
