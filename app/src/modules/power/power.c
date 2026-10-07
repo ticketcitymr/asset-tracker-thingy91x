@@ -308,24 +308,6 @@ static int charger_read_sensors(const struct device *charger, float *voltage, fl
 
 	*voltage = sensor_value_to_float(&value);
 
-	/* DIAGNOSTIC: the charger ADC sometimes returns 0 V. Retry a few times with a short
-	 * delay and log what each fetch returns, to find out whether a later fetch succeeds.
-	 */
-	for (int retry = 1; retry <= 3 && *voltage < 2.0f; retry++) {
-		int fetch_err;
-
-		LOG_WRN("pmic: VBAT raw %d.%06d V, retry %d", value.val1, value.val2, retry);
-		k_msleep(50);
-		fetch_err = sensor_sample_fetch(charger);
-		err = sensor_channel_get(charger, SENSOR_CHAN_GAUGE_VOLTAGE, &value);
-		if (err) {
-			return err;
-		}
-		*voltage = sensor_value_to_float(&value);
-		LOG_WRN("pmic: retry %d fetch=%d VBAT raw %d.%06d V", retry, fetch_err,
-			value.val1, value.val2);
-	}
-
 	err = sensor_channel_get(charger, SENSOR_CHAN_GAUGE_TEMP, &value);
 	if (err) {
 		return err;
