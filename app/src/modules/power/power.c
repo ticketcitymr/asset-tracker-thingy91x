@@ -308,6 +308,24 @@ static int charger_read_sensors(const struct device *charger, float *voltage, fl
 
 	*voltage = sensor_value_to_float(&value);
 
+	/* DIAGNOSTIC: the charger ADC sometimes returns 0 V. Retry a few times with a short
+	 * delay and log what each fetch returns, to find out whether a later fetch succeeds.
+	 */
+	for (int retry = 1; retry <= 3 && *voltage < 2.0f; retry++) {
+		int fetch_err;
+
+		LOG_WRN("pmic: VBAT raw %d.%06d V, retry %d", value.val1, value.val2, retry);
+		k_msleep(50);
+		fetch_err = sensor_sample_fetch(charger);
+		err = sensor_channel_get(charger, SENSOR_CHAN_GAUGE_VOLTAGE, &value);
+		if (err) {
+			return err;
+		}
+		*voltage = sensor_value_to_float(&value);
+		LOG_WRN("pmic: retry %d fetch=%d VBAT raw %d.%06d V", retry, fetch_err,
+			value.val1, value.val2);
+	}
+
 	err = sensor_channel_get(charger, SENSOR_CHAN_GAUGE_TEMP, &value);
 	if (err) {
 		return err;
@@ -382,6 +400,9 @@ static void power_update_charge_state_if_changed(int32_t chg_status, int32_t *pr
 					      &ext_data);
 }
 
+/* A battery voltage below this is a failed measurement, not an empty battery. */
+#define BATTERY_VOLTAGE_MIN_VALID_V 2.0f
+
 static int sample_and_process(struct power_state_object *state_object)
 {
 	int err;
@@ -389,15 +410,27 @@ static int sample_and_process(struct power_state_object *state_object)
 	int32_t chg_status;
 	bool vbus_connected;
 	float delta;
+	float voltage, current, temperature;
 
-	err = charger_read_sensors(state_object->charger, &state_object->voltage,
-				   &state_object->current, &state_object->temperature, &chg_status,
-				   &vbus_connected);
+	err = charger_read_sensors(state_object->charger, &voltage, &current, &temperature,
+				   &chg_status, &vbus_connected);
 	if (err) {
 		LOG_ERR("Failed to read charger sensors: %d", err);
 		return err;
 	}
 
+	/* Feeding a bogus ~0 V reading to the fuel gauge makes the state of charge collapse and
+	 * recover only slowly. Keep the last good values and try again at the next sample.
+	 */
+	if (voltage < BATTERY_VOLTAGE_MIN_VALID_V) {
+		LOG_WRN("Ignoring invalid battery voltage: %.3f V", (double)voltage);
+		timer_sample_start(CONFIG_APP_POWER_SAMPLE_INTERVAL_MS);
+		return -EAGAIN;
+	}
+
+	state_object->voltage = voltage;
+	state_object->current = current;
+	state_object->temperature = temperature;
 	state_object->charging = power_is_charging(chg_status);
 
 	/* Inform fuel gauge of VBUS state */
@@ -535,7 +568,7 @@ static void state_idle_entry(void *obj)
 
 static enum smf_state_result state_idle_run(void *obj)
 {
-	const struct power_state_object *state_object = obj;
+	struct power_state_object *state_object = obj;
 
 	if (state_object->chan == &priv_power_chan) {
 		const struct priv_power_msg *msg =
@@ -557,6 +590,8 @@ static enum smf_state_result state_idle_run(void *obj)
 		 * that the system is active and should transition to STATE_ACTIVE.
 		 */
 		if (power_msg->type == POWER_BATTERY_PERCENTAGE_SAMPLE_REQUEST) {
+			/* The values are frozen while idle, so take a fresh reading first. */
+			(void)sample_and_process(state_object);
 			send_battery_percentage_sample_response(state_object);
 			smf_set_state(SMF_CTX(state_object), &states[STATE_ACTIVE]);
 
@@ -654,8 +689,18 @@ static void power_module_thread(void)
 		return;
 	}
 
-	err = charger_read_sensors(power_state.charger, &parameters.v0, &parameters.i0,
-				   &parameters.t0, &chg_status, NULL);
+	/* The charger's ADC can return 0 V right after power-up. Retry for up to one second. */
+	for (int attempt = 0; attempt < 10; attempt++) {
+		err = charger_read_sensors(power_state.charger, &parameters.v0, &parameters.i0,
+					   &parameters.t0, &chg_status, NULL);
+		if (err || parameters.v0 >= BATTERY_VOLTAGE_MIN_VALID_V) {
+			break;
+		}
+		k_msleep(100);
+	}
+	if (!err && parameters.v0 < BATTERY_VOLTAGE_MIN_VALID_V) {
+		LOG_WRN("Battery voltage still invalid at start: %.3f V", (double)parameters.v0);
+	}
 	if (err) {
 		LOG_ERR("charger_read_sensors, error: %d", err);
 		SEND_FATAL_ERROR();
