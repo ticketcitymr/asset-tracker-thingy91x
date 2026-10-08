@@ -32,6 +32,17 @@ config APP_PANIC
 	  The same gesture again ends it, otherwise it ends by itself after
 	  CONFIG_APP_PANIC_DURATION_MINUTES.
 
+config APP_MOTION_SEND_IMMEDIATELY
+	bool "Send every sample at once while the tracker is moving"
+	depends on APP_IMPACT
+	default n
+	help
+	  While motion (or a lift ride) keeps the faster
+	  CONFIG_APP_SAMPLING_INTERVAL_ACTIVE_SECONDS interval running, upload each sample
+	  as soon as it is taken instead of in batches, so the dashboard follows the tracker
+	  live. Samples taken without signal (inside a lift shaft) are still buffered and
+	  uploaded later with their original timestamps. Costs battery while moving.
+
 config APP_PANIC_SAMPLING_INTERVAL_SECONDS
 	int "Sampling interval in panic mode"
 	default 30

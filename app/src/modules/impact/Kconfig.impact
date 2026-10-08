@@ -67,6 +67,35 @@ config APP_IMPACT_MOTION_STILL_TIMEOUT_SECONDS
           stationary again, at which point the sampling interval reverts from
           CONFIG_APP_SAMPLING_INTERVAL_ACTIVE_SECONDS back to
           CONFIG_APP_SAMPLING_INTERVAL_SECONDS.
+config APP_IMPACT_LIFT_DETECT
+        bool "Treat a lift (elevator) ride as movement"
+        default y
+        help
+          A lift ride is smooth, so the peak-to-peak motion test above sees
+          almost nothing and the tracker would relax back to the slow
+          sampling interval in the middle of the ride. A lift does change the
+          size of the acceleration vector for a second or two (vertical
+          acceleration at the start and end of the ride; tilting or
+          sideways acceleration barely changes it). When a quiet ~1 second
+          window has a mean that differs from the recent baseline by at least
+          CONFIG_APP_IMPACT_LIFT_DEV_MG, the tracker counts it as a lift and
+          keeps the fast sampling interval for
+          CONFIG_APP_IMPACT_LIFT_HOLD_SECONDS after the last such window.
+
+config APP_IMPACT_LIFT_DEV_MG
+        int "Lift detection: mean acceleration change in milli-g"
+        default 30
+        depends on APP_IMPACT_LIFT_DETECT
+        help
+          Smallest shift of a quiet 1 second window's mean acceleration
+          magnitude, relative to the slow baseline, that counts as a lift
+          starting or stopping. Typical lifts are 0.05 to 0.15 g.
+
+config APP_IMPACT_LIFT_HOLD_SECONDS
+        int "Lift detection: seconds of fast sampling after the last lift signal"
+        default 300
+        depends on APP_IMPACT_LIFT_DETECT
+
 config APP_IMPACT_ACTIVITY_REPORT_INTERVAL_SECONDS
         int "Activity summary report interval in seconds"
         default 300

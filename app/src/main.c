@@ -1135,6 +1135,23 @@ static enum smf_state_result running_run(void *o)
 					err);
 				SEND_FATAL_ERROR();
 			}
+
+#if defined(CONFIG_APP_MOTION_SEND_IMMEDIATELY)
+			/* While moving, send every sample as soon as it is taken (like panic mode);
+			 * back to the configured batch size once still.
+			 */
+			{
+				struct storage_msg storage_msg = {
+					.type = STORAGE_SET_THRESHOLD,
+					.data_len = msg->is_moving ? 1 : state_object->storage_threshold,
+				};
+
+				err = zbus_chan_pub(&storage_chan, &storage_msg, PUB_TIMEOUT);
+				if (err) {
+					LOG_ERR("Failed to publish storage threshold, error: %d", err);
+				}
+			}
+#endif /* CONFIG_APP_MOTION_SEND_IMMEDIATELY */
 		}
 
 		return SMF_EVENT_HANDLED;

@@ -130,6 +130,20 @@ static int32_t motion_window_ticks_left = MOTION_WINDOW_TICKS;
 static bool is_moving;
 static uint32_t still_windows_count;
 
+#if defined(CONFIG_APP_IMPACT_LIFT_DETECT)
+/* Lift (elevator) detection: see Kconfig.impact. Slow baseline of the quiet-window
+ * mean magnitude (about 20 s time constant). Only touched from the sample work item.
+ */
+#define LIFT_BASELINE_ALPHA 0.05
+#define LIFT_HOLD_WINDOWS \
+        MAX(1, ((CONFIG_APP_IMPACT_LIFT_HOLD_SECONDS * 1000) / \
+                (MOTION_WINDOW_TICKS * CONFIG_APP_IMPACT_SAMPLE_INTERVAL_MS)))
+static double motion_window_sum;
+static double lift_baseline_g;
+static bool lift_baseline_valid;
+static bool lift_hold_active;
+#endif
+
 /* Number of sample ticks between periodic activity-summary reports. */
 #define ACTIVITY_REPORT_TICKS \
         MAX(1, ((CONFIG_APP_IMPACT_ACTIVITY_REPORT_INTERVAL_SECONDS * 1000) / \
@@ -173,12 +187,18 @@ static void update_motion_state(double g)
         double range_g;
         bool window_had_motion;
 
+        bool lift = false;
+        uint32_t still_needed = MOTION_STILL_WINDOWS;
+
         if (g < motion_window_min_g) {
                 motion_window_min_g = g;
         }
         if (g > motion_window_max_g) {
                 motion_window_max_g = g;
         }
+#if defined(CONFIG_APP_IMPACT_LIFT_DETECT)
+        motion_window_sum += g;
+#endif
 
         if (--motion_window_ticks_left > 0) {
                 return;
@@ -187,9 +207,44 @@ static void update_motion_state(double g)
         range_g = motion_window_max_g - motion_window_min_g;
         window_had_motion = range_g >= (CONFIG_APP_IMPACT_MOTION_THRESHOLD_MG / 1000.0);
 
-        if (window_had_motion) {
+#if defined(CONFIG_APP_IMPACT_LIFT_DETECT)
+        {
+                double mean_g = motion_window_sum / MOTION_WINDOW_TICKS;
+
+                if (!lift_baseline_valid) {
+                        lift_baseline_g = mean_g;
+                        lift_baseline_valid = true;
+                } else if (!window_had_motion) {
+                        /* A quiet window whose mean left the baseline is a lift starting or
+                         * stopping; otherwise it just refines the baseline.
+                         */
+                        if (fabs(mean_g - lift_baseline_g) >=
+                            (CONFIG_APP_IMPACT_LIFT_DEV_MG / 1000.0)) {
+                                lift = true;
+                        } else {
+                                lift_baseline_g +=
+                                        (mean_g - lift_baseline_g) * LIFT_BASELINE_ALPHA;
+                        }
+                }
+        }
+        motion_window_sum = 0.0;
+        if (lift_hold_active) {
+                still_needed = LIFT_HOLD_WINDOWS;
+        }
+#endif
+
+        if (window_had_motion || lift) {
                 still_windows_count = 0;
 
+#if defined(CONFIG_APP_IMPACT_LIFT_DETECT)
+                if (lift) {
+                        if (!lift_hold_active) {
+                                LOG_INF("Lift signal, holding fast sampling for %d s",
+                                        CONFIG_APP_IMPACT_LIFT_HOLD_SECONDS);
+                        }
+                        lift_hold_active = true;
+                }
+#endif
                 if (!is_moving) {
                         is_moving = true;
                         report_motion_state(true);
@@ -197,8 +252,11 @@ static void update_motion_state(double g)
         } else if (is_moving) {
                 still_windows_count++;
 
-                if (still_windows_count >= MOTION_STILL_WINDOWS) {
+                if (still_windows_count >= still_needed) {
                         is_moving = false;
+#if defined(CONFIG_APP_IMPACT_LIFT_DETECT)
+                        lift_hold_active = false;
+#endif
                         report_motion_state(false);
                 }
         }
